@@ -14,6 +14,13 @@ export default function Home() {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
 
+  const stepsList = [
+    "Positionnement des tâches",
+    "Calcul des durées",
+    "Positionnement des tâches",
+    "Construction du diagramme GANTT",
+  ];
+
   const [tableData, setTableData] = useState(
     Array.from({ length: 3 }, () => Array(14).fill(""))
   );
@@ -44,7 +51,46 @@ export default function Home() {
 
   // Axe horizontal : 0 à 50 par défaut
   const maxTime = 50;
-  const timeLabels = Array.from({ length: maxTime + 1 }, (_, i) => i);
+  const timeLabels = Array.from({ length: maxTime }, (_, i) => i + 1);
+
+  const isTableComplete = tableData.every(row =>
+    row.every(cell => cell.trim() !== "")
+  );
+
+  const tasks = taskNames.map((name, i) => {
+    const duration = parseInt(tableData[1][i]) || 0;
+
+    const depsRaw = tableData[2][i];
+    const deps =
+      depsRaw.trim() === "-" || depsRaw.trim() === ""
+        ? []
+        : depsRaw.split(",").map(d => d.trim());
+
+    return { name, duration, deps };
+  });
+  
+  const calculateSchedule = (tasks) => {
+    const result = {};
+
+    tasks.forEach(task => {
+      let start = 1;
+
+      if (task.deps.length > 0) {
+        start = Math.max(
+          ...task.deps.map(dep => result[dep]?.end || 1)
+        );
+      }
+
+      result[task.name] = {
+        start,
+        end: start + task.duration,
+      };
+    });
+
+    return result;
+  };
+
+  const schedule = calculateSchedule(tasks);
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -80,7 +126,7 @@ export default function Home() {
                   {tableData[1]?.map((value, i) => (
                     <td key={i} className="border border-gray-400 px-2 py-3 text-center">
                       <input
-                        type="text"
+                        type="number"
                         value={value}
                         onChange={(e) => handleChange(1, i, e.target.value)}
                         className="w-full text-center outline-none"
@@ -108,7 +154,7 @@ export default function Home() {
           {/* REPERE ORTHONORME / GANTTE */}
           {started && (
             <div className="mt-8 p-4 bg-white rounded-lg shadow">
-              <h2 className="font-semibold mb-4 text-[#033012]">Visualisation GANTT</h2>
+              {/* <h2 className="font-semibold mb-4 text-[#033012]">Visualisation GANTT</h2> */}
 
               <div className="overflow-x-auto">
                 <div style={{ minWidth: `${(maxTime + 2) * 22}px` }}>
@@ -122,11 +168,14 @@ export default function Home() {
                     <thead>
                       <tr>
                         {/* Cellule vide en haut à gauche (coin) */}
-                        <th
-                          style={{ width: 32, minWidth: 32 }}
-                          className="border-0 bg-white"
-                        />
-                        {timeLabels.map(t => (
+                       <th
+                        style={{ width: 32, minWidth: 32 }}
+                        className="text-center text-gray-600 border-0 pb-1"
+                      >
+                        0
+                      </th>
+
+                      {timeLabels.map(t => (
                           <th
                             key={t}
                             style={{ width: 22, minWidth: 22, fontWeight: "normal" }}
@@ -150,26 +199,40 @@ export default function Home() {
                           </td>
                         </tr>
                       ) : (
-                        taskNames.map((taskName, rowIdx) => (
+                        tasks.map((task, rowIdx) => {
+                        const taskSchedule = schedule[task.name];
+
+                        return (
                           <tr key={rowIdx}>
-                            {/* Nom de la tâche — axe vertical */}
+                            {/* Nom tâche */}
                             <td
                               style={{ width: 32, minWidth: 32 }}
                               className="text-center font-semibold text-gray-800 border border-gray-300 bg-white"
                             >
-                              {taskName}
+                              {task.name}
                             </td>
 
-                            {/* Cellules de la grille (0 à 50) */}
-                            {timeLabels.map(t => (
-                              <td
-                                key={t}
-                                style={{ width: 22, minWidth: 22, height: 28 }}
-                                className="border border-dashed border-gray-300 bg-white"
-                              />
-                            ))}
+                            {/* Grille */}
+                            {timeLabels.map(t => {
+                              const isVisible = rowIdx <= step; // 👈 contrôle étape
+                              const isActive =
+                                isVisible &&
+                                t >= taskSchedule.start &&
+                                t < taskSchedule.end;
+
+                              return (
+                                <td
+                                  key={t}
+                                  style={{ width: 22, minWidth: 22, height: 28 }}
+                                  className={`border border-dashed ${
+                                    isActive ? "bg-green-400" : "bg-white"
+                                  }`}
+                                />
+                              );
+                            })}
                           </tr>
-                        ))
+                        );
+                      })
                       )}
                     </tbody>
                   </table>
@@ -214,7 +277,12 @@ export default function Home() {
             {!started ? (
               <button
                 onClick={() => setStarted(true)}
-                className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
+                disabled={!isTableComplete}
+                className={`px-3 py-1 rounded text-white ${
+                  isTableComplete
+                    ? "bg-green-500 hover:bg-green-600"
+                    : "bg-gray-300 cursor-not-allowed"
+                }`}
               >
                 Commencer
               </button>
@@ -235,9 +303,56 @@ export default function Home() {
               </div>
             )}
           </div>
-          <p className="text-gray-600">
-            Suivez les étapes de calcul du chemin critique (dates au plus tôt, dates au plus tard, marges).
-          </p>
+
+          {/* MESSAGE D'ERREUR */}
+          {!isTableComplete && !started && (
+            <p className="text-red-500 text-sm mt-2">
+              Veuillez remplir toutes les cellules avant de commencer.
+            </p>
+          )}
+          <div>
+            <h2 className="text-xl font-bold text-[#033012]">Etapes de réalisation ORD GANTT :</h2>
+            {/* <p className="text-gray-600">
+              1. Saisissez les tâches, leurs durées et leurs dépendances dans le tableau de gauche.
+            </p>
+            <p className="text-gray-600">
+              2. Cliquez sur "Commencer" pour générer la visualisation GANTT à droite.
+            </p>
+            <p className="text-gray-600">
+              3. Utilisez les boutons "Précédent" et "Suivant" pour suivre étape par étape la construction du diagramme de GANTT.
+            </p>
+            <p className="text-gray-600">
+              4. Observez comment les tâches sont positionnées en fonction de leurs durées et de leurs dépendances, et comment le chemin critique se dessine progressivement.
+            </p>
+            <p>
+              5. Analysez les résultats à chaque étape pour comprendre l'impact des dépendances et des durées sur le planning global du projet.
+            </p> 
+            <p className="text-gray-600">
+              Suivez les étapes de calcul du chemin critique (dates au plus tôt, dates au plus tard, marges).
+            </p>
+            */}
+            {stepsList.map((label, index) => (
+              <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
+                <div
+                  className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
+                    step >= index ? "bg-green-500" : "bg-gray-300"
+                  }`}
+                >
+                  {step >= index ? "✓" : index + 1}
+                </div>
+
+                <p
+                  className={`text-sm ${
+                    step >= index ? "text-green-700 line-through" : "text-gray-600"
+                  }`}
+                >
+                  {label}
+                </p>
+              </div>
+            ))}
+                        
+          </div>
+          
         </div>
       </div>
     </div>
