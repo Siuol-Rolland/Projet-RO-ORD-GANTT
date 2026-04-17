@@ -14,9 +14,11 @@ export default function Home() {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
 
+  
+
   const stepsList = [
     "Positionnement des tâches",
-    "Calcul des durées",
+    "Chemin critique",
     "Positionnement des tâches",
     "Construction du diagramme GANTT",
   ];
@@ -91,6 +93,9 @@ export default function Home() {
   };
 
   const schedule = calculateSchedule(tasks);
+
+  const isAllTasksDisplayed =
+    tasks.length > 0 && step >= tasks.length - 1;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -331,25 +336,35 @@ export default function Home() {
               Suivez les étapes de calcul du chemin critique (dates au plus tôt, dates au plus tard, marges).
             </p>
             */}
-            {stepsList.map((label, index) => (
-              <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
-                <div
-                  className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
-                    step >= index ? "bg-green-500" : "bg-gray-300"
-                  }`}
-                >
-                  {step >= index ? "✓" : index + 1}
-                </div>
+            {stepsList.map((label, index) => {
+              const isAllTasksDisplayed =
+                tasks.length > 0 && step >= tasks.length - 1;
 
-                <p
-                  className={`text-sm ${
-                    step >= index ? "text-green-700 line-through" : "text-gray-600"
-                  }`}
-                >
-                  {label}
-                </p>
-              </div>
-            ))}
+              const isStepDone =
+                index === 0 && isAllTasksDisplayed;
+
+              return (
+                <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
+                  
+                  <div
+                    className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
+                      isStepDone ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  >
+                    {isStepDone ? "✓" : index + 1}
+                  </div>
+
+                  <p
+                    className={`text-sm ${
+                      isStepDone ? "text-green-700 line-through" : "text-gray-600"
+                    }`}
+                  >
+                    {label}
+                  </p>
+
+                </div>
+              );
+            })}
                         
           </div>
           
