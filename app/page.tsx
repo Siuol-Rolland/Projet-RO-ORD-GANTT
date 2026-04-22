@@ -14,12 +14,15 @@ export default function Home() {
   const [started, setStarted] = useState(false);
   const [step, setStep] = useState(0);
 
+  const [criticalStep, setCriticalStep] = useState(0);
+  const [showCritical, setShowCritical] = useState(false);  
+
   
 
   const stepsList = [
     "Positionnement des tâches",
     "Chemin critique",
-    "Positionnement des tâches",
+    "Trouver les tâches successeurs",
     "Construction du diagramme GANTT",
   ];
 
@@ -71,31 +74,97 @@ export default function Home() {
     return { name, duration, deps };
   });
   
-  const calculateSchedule = (tasks) => {
-    const result = {};
+  const calculateCriticalPath = (tasks) => {
+    const es = {};
+    const ef = {};
+    const ls = {};
+    const lf = {};
 
+    // ES / EF
     tasks.forEach(task => {
-      let start = 1;
+      if (task.deps.length === 0) {
+        es[task.name] = 0;
+      } else {
+        es[task.name] = Math.max(...task.deps.map(d => ef[d] || 0));
+      }
+      ef[task.name] = es[task.name] + task.duration;
+    });
 
-      if (task.deps.length > 0) {
-        start = Math.max(
-          ...task.deps.map(dep => result[dep]?.end || 1)
+    const projectEnd = Math.max(...Object.values(ef));
+
+    // successeurs
+    const successors = {};
+    tasks.forEach(t => {
+      successors[t.name] = [];
+    });
+    tasks.forEach(t => {
+      t.deps.forEach(dep => {
+        if (successors[dep]) {
+          successors[dep].push(t.name);
+        }
+      });
+    });
+
+    // LS / LF
+    [...tasks].reverse().forEach(task => {
+      if (successors[task.name].length === 0) {
+        lf[task.name] = projectEnd;
+      } else {
+        lf[task.name] = Math.min(
+          ...successors[task.name].map(s => ls[s])
         );
       }
+      ls[task.name] = lf[task.name] - task.duration;
+    });
 
+    const result = {};
+    tasks.forEach(task => {
+      const margin = ls[task.name] - es[task.name];
       result[task.name] = {
-        start,
-        end: start + task.duration,
+        es: es[task.name],
+        ef: ef[task.name],
+        isCritical: margin === 0,
       };
     });
 
-    return result;
+    return { result, projectEnd };
   };
 
-  const schedule = calculateSchedule(tasks);
+  const { result: criticalData = {}, projectEnd = 0 } =
+  tasks.length > 0 ? calculateCriticalPath(tasks) : {};
+
+  const criticalPath = tasks
+  .filter(t => criticalData[t.name]?.isCritical)
+  .map(t => t.name);
+
+  const calculateSuccessors = (tasks) => {
+    const successors = {};
+
+    // initialiser
+    tasks.forEach(t => {
+      successors[t.name] = [];
+    });
+
+    // remplir
+    tasks.forEach(t => {
+      t.deps.forEach(dep => {
+        if (successors[dep]) {
+          successors[dep].push(t.name);
+        }
+      });
+    });
+
+    return successors;
+  };
+
+  const successorsData =
+  tasks.length > 0 ? calculateSuccessors(tasks) : {};
 
   const isAllTasksDisplayed =
     tasks.length > 0 && step >= tasks.length - 1;
+  
+  const isCriticalComplete =
+    showCritical && criticalStep === criticalPath.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -152,6 +221,24 @@ export default function Home() {
                     </td>
                   ))}
                 </tr>
+                
+                {/* Tâches successeurs */}
+                {isCriticalComplete && (
+                  <tr className="bg-white">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      Tâches successeurs
+                    </td>
+
+                    {taskNames.map((_, i) => (
+                      <td
+                        key={i}
+                        className="border border-gray-400 px-2 py-3 text-center"
+                      >
+                        {/* cellule vide */}
+                      </td>
+                    ))}
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -205,7 +292,7 @@ export default function Home() {
                         </tr>
                       ) : (
                         tasks.map((task, rowIdx) => {
-                        const taskSchedule = schedule[task.name];
+                       
 
                         return (
                           <tr key={rowIdx}>
@@ -220,17 +307,33 @@ export default function Home() {
                             {/* Grille */}
                             {timeLabels.map(t => {
                               const isVisible = rowIdx <= step; // 👈 contrôle étape
+                              const info = criticalData[task.name];
+
                               const isActive =
                                 isVisible &&
-                                t >= taskSchedule.start &&
-                                t < taskSchedule.end;
+                                info &&
+                                t > info.es &&
+                                t <= info.ef;
+
+                              // 🔥 Animation chemin critique
+                              const critIndex = criticalPath.indexOf(task.name);
+                              const isCritVisible =
+                                showCritical &&
+                                critIndex !== -1 &&
+                                critIndex >= criticalPath.length - criticalStep;
+
+                              const isCriticalCell = isActive && isCritVisible;
 
                               return (
                                 <td
                                   key={t}
                                   style={{ width: 22, minWidth: 22, height: 28 }}
                                   className={`border border-dashed ${
-                                    isActive ? "bg-green-400" : "bg-white"
+                                    isCriticalCell
+                                      ? "bg-red-500"
+                                      : isActive
+                                      ? "bg-green-400"
+                                      : "bg-white"
                                   }`}
                                 />
                               );
@@ -244,6 +347,16 @@ export default function Home() {
 
                 </div>
               </div>
+              {/* Légende */}
+              <div className="flex gap-4 mt-3 text-xs text-gray-600">
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-4 h-4 bg-red-400 rounded" /> Tâche critique
+                </span>
+              </div>
+
             </div>
           )}
         </div>
@@ -300,7 +413,14 @@ export default function Home() {
                   Précédent
                 </button>
                 <button
-                  onClick={() => setStep(prev => prev + 1)}
+                  onClick={() => {
+                    if (step < tasks.length - 1) {
+                      setStep(prev => prev + 1);
+                    } else {
+                      setShowCritical(true);
+                      setCriticalStep(prev => Math.min(prev + 1, criticalPath.length));
+                    }
+                  }}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
                 >
                   Suivant
@@ -341,7 +461,8 @@ export default function Home() {
                 tasks.length > 0 && step >= tasks.length - 1;
 
               const isStepDone =
-                index === 0 && isAllTasksDisplayed;
+                (index === 0 && isAllTasksDisplayed) ||
+                (index === 1 && isCriticalComplete);
 
               return (
                 <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
