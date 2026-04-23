@@ -19,6 +19,7 @@ export default function Home() {
 
   const [successorStep, setSuccessorStep] = useState(0);
   const [showSuccessors, setShowSuccessors] = useState(false);
+  const [successorPhase, setSuccessorPhase] = useState(0);
   
 
   const stepsList = [
@@ -176,6 +177,9 @@ export default function Home() {
   const isSuccessorsComplete =
   showSuccessors && successorStep === successorEntries.length;
 
+  const currentTask =
+  successorEntries[successorStep]?.[0];
+
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
       <h1 className="text-3xl font-bold text-center text-[#033012] mb-10">
@@ -222,12 +226,40 @@ export default function Home() {
                   <td className="px-4 py-3 font-medium text-gray-900">Tâches antérieures</td>
                   {tableData[2]?.map((value, i) => (
                     <td key={i} className="border border-gray-400 px-2 py-3 text-center">
-                      <input
-                        type="text"
-                        value={value}
-                        onChange={(e) => handleChange(2, i, e.target.value)}
-                        className="w-full text-center outline-none"
-                      />
+                      {(() => {
+                        const value = tableData[2][i];
+
+                        if (
+                          showSuccessors &&
+                          successorPhase === 0 &&
+                          currentTask
+                        ) {
+                          const parts = value.split(",").map(v => v.trim());
+
+                          return parts.map((part, idx) => (
+                            <span
+                              key={idx}
+                              className={
+                                part === currentTask
+                                  ? "text-red-500 font-bold"
+                                  : ""
+                              }
+                            >
+                              {part}
+                              {idx < parts.length - 1 ? ", " : ""}
+                            </span>
+                          ));
+                        }
+
+                        return (
+                          <input
+                            type="text"
+                            value={value}
+                            onChange={(e) => handleChange(2, i, e.target.value)}
+                            className="w-full text-center outline-none"
+                          />
+                        );
+                      })()}
                     </td>
                   ))}
                 </tr>
@@ -241,7 +273,9 @@ export default function Home() {
 
                     {taskNames.map((taskName, i) => {
                       const currentEntry = successorEntries[i];
-                      const isVisible = i < successorStep;
+                      const isVisible =
+                        i < successorStep ||
+                        (i === successorStep && successorPhase >= 1);
 
                       return (
                         <td
@@ -433,25 +467,32 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => {
-                    // 1. Affichage des tâches (Gantt)
-                    if (step < tasks.length - 1) {
-                      setStep(prev => prev + 1);
-                    }
+  // 1. Affichage des tâches (Gantt)
+  if (step < tasks.length - 1) {
+    setStep(prev => prev + 1);
+  }
 
-                    // 2. Chemin critique
-                    else if (!showCritical) {
-                      setShowCritical(true);
-                    } else if (criticalStep < criticalPath.length) {
-                      setCriticalStep(prev => prev + 1);
-                    }
+  // 2. Chemin critique
+  else if (!showCritical) {
+    setShowCritical(true);
+  } else if (criticalStep < criticalPath.length) {
+    setCriticalStep(prev => prev + 1);
+  }
 
-                    // 3. Successeurs
-                    else if (!showSuccessors) {
-                      setShowSuccessors(true);
-                    } else if (successorStep < successorEntries.length) {
-                      setSuccessorStep(prev => prev + 1);
-                    }
-                  }}
+  // 3. Successeurs
+  else if (!showSuccessors) {
+    setShowSuccessors(true);
+  } else {
+    // Phase 0 → on passe directement à phase 2 (rouge + successeur en un seul clic)
+    if (successorPhase === 0) {
+      setSuccessorPhase(2); // ← saute phase 1, affiche tout d'un coup
+    } else {
+      // Phase 2 → reset et tâche suivante
+      setSuccessorPhase(0);
+      setSuccessorStep(prev => prev + 1);
+    }
+  }
+}}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
                 >
                   Suivant
