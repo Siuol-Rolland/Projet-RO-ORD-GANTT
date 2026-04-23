@@ -17,13 +17,18 @@ export default function Home() {
   const [criticalStep, setCriticalStep] = useState(0);
   const [showCritical, setShowCritical] = useState(false);  
 
+  const [successorStep, setSuccessorStep] = useState(0);
+  const [showSuccessors, setShowSuccessors] = useState(false);
   
 
   const stepsList = [
     "Positionnement des tâches",
     "Chemin critique",
-    "Trouver les tâches successeurs",
-    "Construction du diagramme GANTT",
+    "Les tâches successeurs",
+    "(Date au plustard)",
+    "Marges totales",
+    ".....",
+    "Marges libres",
   ];
 
   const [tableData, setTableData] = useState(
@@ -165,6 +170,11 @@ export default function Home() {
   
   const isCriticalComplete =
     showCritical && criticalStep === criticalPath.length;
+  
+  const successorEntries = Object.entries(successorsData);
+
+  const isSuccessorsComplete =
+  showSuccessors && successorStep === successorEntries.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -208,7 +218,7 @@ export default function Home() {
                     </td>
                   ))}
                 </tr>
-                <tr className="bg-white">
+                <tr className="bg-white border-b">
                   <td className="px-4 py-3 font-medium text-gray-900">Tâches antérieures</td>
                   {tableData[2]?.map((value, i) => (
                     <td key={i} className="border border-gray-400 px-2 py-3 text-center">
@@ -221,22 +231,31 @@ export default function Home() {
                     </td>
                   ))}
                 </tr>
-                
+
                 {/* Tâches successeurs */}
-                {isCriticalComplete && (
+                {showSuccessors && (
                   <tr className="bg-white">
                     <td className="px-4 py-3 font-medium text-gray-900">
                       Tâches successeurs
                     </td>
 
-                    {taskNames.map((_, i) => (
-                      <td
-                        key={i}
-                        className="border border-gray-400 px-2 py-3 text-center"
-                      >
-                        {/* cellule vide */}
-                      </td>
-                    ))}
+                    {taskNames.map((taskName, i) => {
+                      const currentEntry = successorEntries[i];
+                      const isVisible = i < successorStep;
+
+                      return (
+                        <td
+                          key={i}
+                          className="border border-gray-400 px-2 py-3 text-center"
+                        >
+                          {isVisible && currentEntry
+                            ? currentEntry[1].length === 0
+                              ? "Fin"
+                              : currentEntry[1].join(", ")
+                            : ""}
+                        </td>
+                      );
+                    })}
                   </tr>
                 )}
               </tbody>
@@ -350,7 +369,7 @@ export default function Home() {
               {/* Légende */}
               <div className="flex gap-4 mt-3 text-xs text-gray-600">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale
+                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale (Date plutôt)
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="inline-block w-4 h-4 bg-red-400 rounded" /> Tâche critique
@@ -414,11 +433,23 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => {
+                    // 1. Affichage des tâches (Gantt)
                     if (step < tasks.length - 1) {
                       setStep(prev => prev + 1);
-                    } else {
+                    }
+
+                    // 2. Chemin critique
+                    else if (!showCritical) {
                       setShowCritical(true);
-                      setCriticalStep(prev => Math.min(prev + 1, criticalPath.length));
+                    } else if (criticalStep < criticalPath.length) {
+                      setCriticalStep(prev => prev + 1);
+                    }
+
+                    // 3. Successeurs
+                    else if (!showSuccessors) {
+                      setShowSuccessors(true);
+                    } else if (successorStep < successorEntries.length) {
+                      setSuccessorStep(prev => prev + 1);
                     }
                   }}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
@@ -462,7 +493,8 @@ export default function Home() {
 
               const isStepDone =
                 (index === 0 && isAllTasksDisplayed) ||
-                (index === 1 && isCriticalComplete);
+                (index === 1 && isCriticalComplete) ||
+                (index === 2 && isSuccessorsComplete);
 
               return (
                 <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
