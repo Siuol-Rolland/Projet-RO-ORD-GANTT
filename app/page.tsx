@@ -24,6 +24,9 @@ export default function Home() {
   // ✅ NOUVEAU : état pour les barres oranges (dates au plus tard)
   const [showLateDates, setShowLateDates] = useState(false);
   const [lateDateStep, setLateDateStep] = useState(0); // 0 = aucune, puis on révèle de la dernière vers la première
+  
+  const [showTotalMargin, setShowTotalMargin] = useState(false);
+  const [totalMarginStep, setTotalMarginStep] = useState(0);
 
   const stepsList = [
     "Positionnement des tâches",
@@ -120,8 +123,9 @@ export default function Home() {
       result[task.name] = {
         es: es[task.name],
         ef: ef[task.name],
-        ls: ls[task.name],   // ✅ NOUVEAU
-        lf: lf[task.name],   // ✅ NOUVEAU
+        ls: ls[task.name],   
+        lf: lf[task.name],
+        margin: margin,   
         isCritical: margin === 0,
       };
     });
@@ -162,6 +166,10 @@ export default function Home() {
   // ✅ Nombre de tâches dont la barre orange est déjà affichée
   // lateDateStep = 0 → aucune, 1 → dernière tâche, 2 → avant-dernière, etc.
   const isLateDatesComplete = showLateDates && lateDateStep >= tasks.length;
+
+  const isTotalMarginComplete =
+  showTotalMargin &&
+  totalMarginStep >= tasks.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -238,7 +246,7 @@ export default function Home() {
 
                 {/* Tâches successeurs */}
                 {showSuccessors && (
-                  <tr className="bg-white">
+                  <tr className="bg-white border-b">
                     <td className="px-4 py-3 font-medium text-gray-900">
                       Tâches successeurs
                     </td>
@@ -253,6 +261,34 @@ export default function Home() {
                             ? currentEntry[1].length === 0
                               ? "Fin"
                               : currentEntry[1].join(", ")
+                            : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+
+                {/* Marge totale */}
+                {showTotalMargin && (
+                  <tr className="bg-white border-b">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      Marge totale
+                    </td>
+
+                    {taskNames.map((taskName, i) => {
+                      const isVisible = i < totalMarginStep;
+
+                      return (
+                        <td
+                          key={i}
+                          className={`border border-gray-400 px-2 py-3 text-center font-semibold ${
+                            criticalData[taskName]?.margin === 0
+                              ? "text-red-500"
+                              : "text-blue-600"
+                          }`}
+                        >
+                          {isVisible
+                            ? criticalData[taskName]?.margin ?? ""
                             : ""}
                         </td>
                       );
@@ -522,6 +558,14 @@ export default function Home() {
                     } else if (lateDateStep < tasks.length) {
                       setLateDateStep(prev => prev + 1);
                     }
+                    // ── ÉTAPE 5 : Affichage ligne "Marge totale" ──
+                    else if (!showTotalMargin && isLateDatesComplete) {
+                      setShowTotalMargin(true);
+                      setTotalMarginStep(1);
+                    }
+                    else if (totalMarginStep < tasks.length) {
+                      setTotalMarginStep(prev => prev + 1);
+                    }
 
                     // ── Étapes suivantes (non encore implémentées) ──
                     // else { ... }
@@ -549,7 +593,8 @@ export default function Home() {
                 (index === 0 && isAllTasksDisplayed) ||
                 (index === 1 && isCriticalComplete) ||
                 (index === 2 && isSuccessorsComplete) ||
-                (index === 3 && isLateDatesComplete); // ✅ NOUVEAU : étape 4 cochée quand toutes les barres oranges sont affichées
+                (index === 3 && isLateDatesComplete) ||
+                (index === 4 && isTotalMarginComplete);
 
               return (
                 <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50 mb-1">
