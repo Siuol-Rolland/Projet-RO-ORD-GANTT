@@ -15,21 +15,24 @@ export default function Home() {
   const [step, setStep] = useState(0);
 
   const [criticalStep, setCriticalStep] = useState(0);
-  const [showCritical, setShowCritical] = useState(false);  
+  const [showCritical, setShowCritical] = useState(false);
 
   const [successorStep, setSuccessorStep] = useState(0);
   const [showSuccessors, setShowSuccessors] = useState(false);
   const [successorPhase, setSuccessorPhase] = useState(0);
-  
+
+  // ✅ NOUVEAU : état pour les barres oranges (dates au plus tard)
+  const [showLateDates, setShowLateDates] = useState(false);
+  const [lateDateStep, setLateDateStep] = useState(0); // 0 = aucune, puis on révèle de la dernière vers la première
 
   const stepsList = [
     "Positionnement des tâches",
     "Chemin critique",
     "Les tâches successeurs",
-    "(Date au plustard)",
-    "Marges totales",
+    "Date au plutard",
+    "Marge totale",
     ".....",
-    "Marges libres",
+    "Marge libre",
   ];
 
   const [tableData, setTableData] = useState(
@@ -57,10 +60,8 @@ export default function Home() {
     });
   };
 
-  // Récupérer les tâches saisies (ligne 0 = noms des tâches)
   const taskNames = tableData[0].filter(name => name.trim() !== "");
 
-  // Axe horizontal : 0 à 50 par défaut
   const maxTime = 50;
   const timeLabels = Array.from({ length: maxTime }, (_, i) => i + 1);
 
@@ -70,23 +71,21 @@ export default function Home() {
 
   const tasks = taskNames.map((name, i) => {
     const duration = parseInt(tableData[1][i]) || 0;
-
     const depsRaw = tableData[2][i];
     const deps =
       depsRaw.trim() === "-" || depsRaw.trim() === ""
         ? []
         : depsRaw.split(",").map(d => d.trim());
-
     return { name, duration, deps };
   });
-  
+
+  // ✅ Calcul complet ES/EF/LS/LF + marge
   const calculateCriticalPath = (tasks) => {
     const es = {};
     const ef = {};
     const ls = {};
     const lf = {};
 
-    // ES / EF
     tasks.forEach(task => {
       if (task.deps.length === 0) {
         es[task.name] = 0;
@@ -98,27 +97,19 @@ export default function Home() {
 
     const projectEnd = Math.max(...Object.values(ef));
 
-    // successeurs
     const successors = {};
-    tasks.forEach(t => {
-      successors[t.name] = [];
-    });
+    tasks.forEach(t => { successors[t.name] = []; });
     tasks.forEach(t => {
       t.deps.forEach(dep => {
-        if (successors[dep]) {
-          successors[dep].push(t.name);
-        }
+        if (successors[dep]) successors[dep].push(t.name);
       });
     });
 
-    // LS / LF
     [...tasks].reverse().forEach(task => {
       if (successors[task.name].length === 0) {
         lf[task.name] = projectEnd;
       } else {
-        lf[task.name] = Math.min(
-          ...successors[task.name].map(s => ls[s])
-        );
+        lf[task.name] = Math.min(...successors[task.name].map(s => ls[s]));
       }
       ls[task.name] = lf[task.name] - task.duration;
     });
@@ -129,6 +120,8 @@ export default function Home() {
       result[task.name] = {
         es: es[task.name],
         ef: ef[task.name],
+        ls: ls[task.name],   // ✅ NOUVEAU
+        lf: lf[task.name],   // ✅ NOUVEAU
         isCritical: margin === 0,
       };
     });
@@ -137,48 +130,38 @@ export default function Home() {
   };
 
   const { result: criticalData = {}, projectEnd = 0 } =
-  tasks.length > 0 ? calculateCriticalPath(tasks) : {};
+    tasks.length > 0 ? calculateCriticalPath(tasks) : {};
 
   const criticalPath = tasks
-  .filter(t => criticalData[t.name]?.isCritical)
-  .map(t => t.name);
+    .filter(t => criticalData[t.name]?.isCritical)
+    .map(t => t.name);
 
   const calculateSuccessors = (tasks) => {
     const successors = {};
-
-    // initialiser
-    tasks.forEach(t => {
-      successors[t.name] = [];
-    });
-
-    // remplir
+    tasks.forEach(t => { successors[t.name] = []; });
     tasks.forEach(t => {
       t.deps.forEach(dep => {
-        if (successors[dep]) {
-          successors[dep].push(t.name);
-        }
+        if (successors[dep]) successors[dep].push(t.name);
       });
     });
-
     return successors;
   };
 
-  const successorsData =
-  tasks.length > 0 ? calculateSuccessors(tasks) : {};
+  const successorsData = tasks.length > 0 ? calculateSuccessors(tasks) : {};
 
-  const isAllTasksDisplayed =
-    tasks.length > 0 && step >= tasks.length - 1;
-  
-  const isCriticalComplete =
-    showCritical && criticalStep === criticalPath.length;
-  
+  const isAllTasksDisplayed = tasks.length > 0 && step >= tasks.length - 1;
+  const isCriticalComplete = showCritical && criticalStep === criticalPath.length;
   const successorEntries = Object.entries(successorsData);
+  const isSuccessorsComplete = showSuccessors && successorStep === successorEntries.length;
+  const currentTask = successorEntries[successorStep]?.[0];
 
-  const isSuccessorsComplete =
-  showSuccessors && successorStep === successorEntries.length;
+  // ✅ NOUVEAU : La liste des tâches dans l'ordre INVERSE pour l'animation des dates au plus tard
+  // On révèle de la dernière tâche vers la première
+  const reversedTaskNames = [...taskNames].reverse();
 
-  const currentTask =
-  successorEntries[successorStep]?.[0];
+  // ✅ Nombre de tâches dont la barre orange est déjà affichée
+  // lateDateStep = 0 → aucune, 1 → dernière tâche, 2 → avant-dernière, etc.
+  const isLateDatesComplete = showLateDates && lateDateStep >= tasks.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -228,29 +211,18 @@ export default function Home() {
                     <td key={i} className="border border-gray-400 px-2 py-3 text-center">
                       {(() => {
                         const value = tableData[2][i];
-
-                        if (
-                          showSuccessors &&
-                          successorPhase === 0 &&
-                          currentTask
-                        ) {
+                        if (showSuccessors && successorPhase === 0 && currentTask) {
                           const parts = value.split(",").map(v => v.trim());
-
                           return parts.map((part, idx) => (
                             <span
                               key={idx}
-                              className={
-                                part === currentTask
-                                  ? "text-red-500 font-bold"
-                                  : ""
-                              }
+                              className={part === currentTask ? "text-red-500 font-bold" : ""}
                             >
                               {part}
                               {idx < parts.length - 1 ? ", " : ""}
                             </span>
                           ));
                         }
-
                         return (
                           <input
                             type="text"
@@ -270,18 +242,13 @@ export default function Home() {
                     <td className="px-4 py-3 font-medium text-gray-900">
                       Tâches successeurs
                     </td>
-
                     {taskNames.map((taskName, i) => {
                       const currentEntry = successorEntries[i];
                       const isVisible =
                         i < successorStep ||
                         (i === successorStep && successorPhase >= 1);
-
                       return (
-                        <td
-                          key={i}
-                          className="border border-gray-400 px-2 py-3 text-center"
-                        >
+                        <td key={i} className="border border-gray-400 px-2 py-3 text-center">
                           {isVisible && currentEntry
                             ? currentEntry[1].length === 0
                               ? "Fin"
@@ -296,31 +263,24 @@ export default function Home() {
             </table>
           </div>
 
-          {/* REPERE ORTHONORME / GANTTE */}
+          {/* REPERE ORTHONORME / GANTT */}
           {started && (
             <div className="mt-8 p-4 bg-white rounded-lg shadow">
-              {/* <h2 className="font-semibold mb-4 text-[#033012]">Visualisation GANTT</h2> */}
-
               <div className="overflow-x-auto">
                 <div style={{ minWidth: `${(maxTime + 2) * 22}px` }}>
-
-                  {/* GRILLE */}
                   <table
                     className="border-collapse text-xs"
                     style={{ tableLayout: "fixed", width: `${(maxTime + 2) * 22}px` }}
                   >
-                    {/* LIGNE DES NUMEROS (axe horizontal) */}
                     <thead>
                       <tr>
-                        {/* Cellule vide en haut à gauche (coin) */}
-                       <th
-                        style={{ width: 32, minWidth: 32 }}
-                        className="text-center text-gray-600 border-0 pb-1"
-                      >
-                        0
-                      </th>
-
-                      {timeLabels.map(t => (
+                        <th
+                          style={{ width: 32, minWidth: 32 }}
+                          className="text-center text-gray-600 border-0 pb-1"
+                        >
+                          0
+                        </th>
+                        {timeLabels.map(t => (
                           <th
                             key={t}
                             style={{ width: 22, minWidth: 22, fontWeight: "normal" }}
@@ -334,82 +294,144 @@ export default function Home() {
 
                     <tbody>
                       {taskNames.length === 0 ? (
-                        /* Message si aucune tâche saisie */
                         <tr>
-                          <td
-                            colSpan={maxTime + 2}
-                            className="text-center text-gray-400 py-12 italic"
-                          >
+                          <td colSpan={maxTime + 2} className="text-center text-gray-400 py-12 italic">
                             Saisissez des tâches dans le tableau ci-dessus pour les voir apparaître ici.
                           </td>
                         </tr>
                       ) : (
                         tasks.map((task, rowIdx) => {
-                       
+                          const isVisible = rowIdx <= step;
+                          const info = criticalData[task.name];
 
-                        return (
-                          <tr key={rowIdx}>
-                            {/* Nom tâche */}
-                            <td
-                              style={{ width: 32, minWidth: 32 }}
-                              className="text-center font-semibold text-gray-800 border border-gray-300 bg-white"
-                            >
-                              {task.name}
-                            </td>
+                          // ✅ Barre bleue/verte : de es+1 à ef (date au plus tôt)
+                          // ✅ Barre rouge : chemin critique
+                          // ✅ Barre orange : de ef+1 à lf (marge = date au plus tard - date au plus tôt)
+                          //    Elle s'affiche seulement si la tâche a été "révélée" dans l'animation
+                          //    L'animation va de la dernière tâche (index tasks.length-1) vers la première (index 0)
+                          //    reversedTaskNames[0] = dernière tâche, révélée au clic 1
+                          //    reversedTaskNames[lateDateStep-1] = tâche révélée au dernier clic
 
-                            {/* Grille */}
-                            {timeLabels.map(t => {
-                              const isVisible = rowIdx <= step; // 👈 contrôle étape
-                              const info = criticalData[task.name];
+                          // Index dans la liste inversée
+                          const reversedIdx = tasks.length - 1 - rowIdx;
+                          // La barre orange est visible si showLateDates ET que cet index < lateDateStep
+                          const isOrangeVisible =
+                            showLateDates &&
+                            reversedIdx < lateDateStep;
 
-                              const isActive =
-                                isVisible &&
-                                info &&
-                                t > info.es &&
-                                t <= info.ef;
+                          return (
+                            <tr key={rowIdx}>
+                              {/* Nom tâche */}
+                              <td
+                                style={{ width: 32, minWidth: 32 }}
+                                className="text-center font-semibold text-gray-800 border border-gray-300 bg-white"
+                              >
+                                {task.name}
+                              </td>
 
-                              // 🔥 Animation chemin critique
-                              const critIndex = criticalPath.indexOf(task.name);
-                              const isCritVisible =
-                                showCritical &&
-                                critIndex !== -1 &&
-                                critIndex >= criticalPath.length - criticalStep;
+                              {/* Grille */}
+                              {timeLabels.map(t => {
+                                if (!isVisible || !info) {
+                                  return (
+                                    <td
+                                      key={t}
+                                      style={{ width: 22, minWidth: 22, height: 28 }}
+                                      className="border border-dashed bg-white"
+                                    />
+                                  );
+                                }
 
-                              const isCriticalCell = isActive && isCritVisible;
+                                // Barre bleue/verte : date au plus tôt (es → ef)
+                                const isEarlyDate = t > info.es && t <= info.ef;
 
-                              return (
-                                <td
-                                  key={t}
-                                  style={{ width: 22, minWidth: 22, height: 28 }}
-                                  className={`border border-dashed ${
-                                    isCriticalCell
-                                      ? "bg-red-500"
-                                      : isActive
-                                      ? "bg-green-400"
-                                      : "bg-white"
-                                  }`}
-                                />
-                              );
-                            })}
-                          </tr>
-                        );
-                      })
+                                // Chemin critique
+                                const critIndex = criticalPath.indexOf(task.name);
+                                const isCritVisible =
+                                  showCritical &&
+                                  critIndex !== -1 &&
+                                  critIndex >= criticalPath.length - criticalStep;
+                                const isCriticalCell = isEarlyDate && isCritVisible;
+
+                                // ✅ Barre orange : marge (ef → lf), seulement si pas chemin critique
+                                const isOrangeDate =
+                                  isOrangeVisible &&
+                                  t > info.ls &&
+                                  t <= info.lf;
+
+                                let bgColor = "bg-white";
+
+                                if (isCriticalCell) bgColor = "bg-red-500";
+                                else if (isEarlyDate) bgColor = "bg-green-400";
+                                else if (isOrangeDate) bgColor = "bg-orange-400";
+
+                                return (
+                                  <td
+                                    key={t}
+                                    style={{
+                                      width: 22,
+                                      minWidth: 22,
+                                      height: 28,
+                                      padding: 0,
+                                      position: "relative",
+                                      overflow: "hidden",
+                                      borderRadius: 2,
+                                    }}
+                                    className="border border-dashed bg-white"
+                                  >
+                                    {/* BARRE ORANGE (haut) */}
+                                    {isOrangeDate && (
+                                      <div
+                                        className="bg-orange-400"
+                                        style={{
+                                          position: "absolute",
+                                          top: 0,
+                                          left: 0,
+                                          width: "100%",
+                                          height: "40%",
+                                        }}
+                                      />
+                                    )}
+
+                                    {/* BARRE VERTE ou ROUGE (bas) */}
+                                    {(isEarlyDate || isCriticalCell) && (
+                                      <div
+                                        className={isCriticalCell ? "bg-red-500" : "bg-green-400"}
+                                        style={{
+                                          position: "absolute",
+                                          bottom: 0,
+                                          left: 0,
+                                          width: "100%",
+                                          height: "60%",
+                                        }}
+                                      />
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
-
                 </div>
               </div>
+
               {/* Légende */}
-              <div className="flex gap-4 mt-3 text-xs text-gray-600">
+              <div className="flex gap-4 mt-3 text-xs text-gray-600 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale (Date plutôt)
+                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale (Date au plus tôt)
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-red-400 rounded" /> Tâche critique
+                  <span className="inline-block w-4 h-4 bg-red-400 rounded" /> Chemin critique
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-4 h-4 bg-orange-400 rounded" /> Date au plus tard (marge)
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="inline-block w-4 h-4 bg-blue-400 rounded" /> (-------)
                 </span>
               </div>
-
             </div>
           )}
         </div>
@@ -467,32 +489,43 @@ export default function Home() {
                 </button>
                 <button
                   onClick={() => {
-  // 1. Affichage des tâches (Gantt)
-  if (step < tasks.length - 1) {
-    setStep(prev => prev + 1);
-  }
+                    // ── ÉTAPE 1 : Affichage des tâches (Gantt) ──
+                    if (step < tasks.length - 1) {
+                      setStep(prev => prev + 1);
+                    }
 
-  // 2. Chemin critique
-  else if (!showCritical) {
-    setShowCritical(true);
-  } else if (criticalStep < criticalPath.length) {
-    setCriticalStep(prev => prev + 1);
-  }
+                    // ── ÉTAPE 2 : Chemin critique ──
+                    else if (!showCritical) {
+                      setShowCritical(true);
+                    } else if (criticalStep < criticalPath.length) {
+                      setCriticalStep(prev => prev + 1);
+                    }
 
-  // 3. Successeurs
-  else if (!showSuccessors) {
-    setShowSuccessors(true);
-  } else {
-    // Phase 0 → on passe directement à phase 2 (rouge + successeur en un seul clic)
-    if (successorPhase === 0) {
-      setSuccessorPhase(2); // ← saute phase 1, affiche tout d'un coup
-    } else {
-      // Phase 2 → reset et tâche suivante
-      setSuccessorPhase(0);
-      setSuccessorStep(prev => prev + 1);
-    }
-  }
-}}
+                    // ── ÉTAPE 3 : Successeurs ──
+                    else if (!showSuccessors) {
+                      setShowSuccessors(true);
+                    } else if (!isSuccessorsComplete) {
+                      if (successorPhase === 0) {
+                        setSuccessorPhase(2);
+                      } else {
+                        setSuccessorPhase(0);
+                        setSuccessorStep(prev => prev + 1);
+                      }
+                    }
+
+                    // ── ÉTAPE 4 : Dates au plus tard (barres oranges) ──
+                    // On active d'abord, puis on révèle une tâche à la fois
+                    // de la DERNIÈRE vers la PREMIÈRE
+                    else if (!showLateDates) {
+                      setShowLateDates(true);
+                      setLateDateStep(1); // révèle la dernière tâche
+                    } else if (lateDateStep < tasks.length) {
+                      setLateDateStep(prev => prev + 1);
+                    }
+
+                    // ── Étapes suivantes (non encore implémentées) ──
+                    // else { ... }
+                  }}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
                 >
                   Suivant
@@ -507,39 +540,19 @@ export default function Home() {
               Veuillez remplir toutes les cellules avant de commencer.
             </p>
           )}
+
           <div>
             <h2 className="text-xl font-bold text-[#033012]">Etapes de réalisation ORD GANTT :</h2>
-            {/* <p className="text-gray-600">
-              1. Saisissez les tâches, leurs durées et leurs dépendances dans le tableau de gauche.
-            </p>
-            <p className="text-gray-600">
-              2. Cliquez sur "Commencer" pour générer la visualisation GANTT à droite.
-            </p>
-            <p className="text-gray-600">
-              3. Utilisez les boutons "Précédent" et "Suivant" pour suivre étape par étape la construction du diagramme de GANTT.
-            </p>
-            <p className="text-gray-600">
-              4. Observez comment les tâches sont positionnées en fonction de leurs durées et de leurs dépendances, et comment le chemin critique se dessine progressivement.
-            </p>
-            <p>
-              5. Analysez les résultats à chaque étape pour comprendre l'impact des dépendances et des durées sur le planning global du projet.
-            </p> 
-            <p className="text-gray-600">
-              Suivez les étapes de calcul du chemin critique (dates au plus tôt, dates au plus tard, marges).
-            </p>
-            */}
-            {stepsList.map((label, index) => {
-              const isAllTasksDisplayed =
-                tasks.length > 0 && step >= tasks.length - 1;
 
+            {stepsList.map((label, index) => {
               const isStepDone =
                 (index === 0 && isAllTasksDisplayed) ||
                 (index === 1 && isCriticalComplete) ||
-                (index === 2 && isSuccessorsComplete);
+                (index === 2 && isSuccessorsComplete) ||
+                (index === 3 && isLateDatesComplete); // ✅ NOUVEAU : étape 4 cochée quand toutes les barres oranges sont affichées
 
               return (
-                <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50">
-                  
+                <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50 mb-1">
                   <div
                     className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
                       isStepDone ? "bg-green-500" : "bg-gray-300"
@@ -547,21 +560,13 @@ export default function Home() {
                   >
                     {isStepDone ? "✓" : index + 1}
                   </div>
-
-                  <p
-                    className={`text-sm ${
-                      isStepDone ? "text-green-700 line-through" : "text-gray-600"
-                    }`}
-                  >
+                  <p className={`text-sm ${isStepDone ? "text-green-700 line-through" : "text-gray-600"}`}>
                     {label}
                   </p>
-
                 </div>
               );
             })}
-                        
           </div>
-          
         </div>
       </div>
     </div>
