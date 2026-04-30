@@ -21,20 +21,23 @@ export default function Home() {
   const [showSuccessors, setShowSuccessors] = useState(false);
   const [successorPhase, setSuccessorPhase] = useState(0);
 
-  // ✅ NOUVEAU : état pour les barres oranges (dates au plus tard)
   const [showLateDates, setShowLateDates] = useState(false);
-  const [lateDateStep, setLateDateStep] = useState(0); // 0 = aucune, puis on révèle de la dernière vers la première
-  
+  const [lateDateStep, setLateDateStep] = useState(0);
+
   const [showTotalMargin, setShowTotalMargin] = useState(false);
   const [totalMarginStep, setTotalMarginStep] = useState(0);
+
+  // ✅ NOUVEAU : marge libre (barres bleues), de la 1ère vers la dernière tâche
+  const [showFreeMargin, setShowFreeMargin] = useState(false);
+  const [freeMarginStep, setFreeMarginStep] = useState(0);
 
   const stepsList = [
     "Positionnement des tâches",
     "Chemin critique",
     "Les tâches successeurs",
-    "Date au plutard",
+    "Date au plus tard ( Flexibilité globale )",
     "Marge totale",
-    ".....",
+    "Flexibilité immédiate",
     "Marge libre",
   ];
 
@@ -64,13 +67,9 @@ export default function Home() {
   };
 
   const taskNames = tableData[0].filter(name => name.trim() !== "");
-
   const maxTime = 50;
   const timeLabels = Array.from({ length: maxTime }, (_, i) => i + 1);
-
-  const isTableComplete = tableData.every(row =>
-    row.every(cell => cell.trim() !== "")
-  );
+  const isTableComplete = tableData.every(row => row.every(cell => cell.trim() !== ""));
 
   const tasks = taskNames.map((name, i) => {
     const duration = parseInt(tableData[1][i]) || 0;
@@ -82,7 +81,6 @@ export default function Home() {
     return { name, duration, deps };
   });
 
-  // ✅ Calcul complet ES/EF/LS/LF + marge
   const calculateCriticalPath = (tasks) => {
     const es = {};
     const ef = {};
@@ -90,11 +88,9 @@ export default function Home() {
     const lf = {};
 
     tasks.forEach(task => {
-      if (task.deps.length === 0) {
-        es[task.name] = 0;
-      } else {
-        es[task.name] = Math.max(...task.deps.map(d => ef[d] || 0));
-      }
+      es[task.name] = task.deps.length === 0
+        ? 0
+        : Math.max(...task.deps.map(d => ef[d] || 0));
       ef[task.name] = es[task.name] + task.duration;
     });
 
@@ -109,23 +105,29 @@ export default function Home() {
     });
 
     [...tasks].reverse().forEach(task => {
-      if (successors[task.name].length === 0) {
-        lf[task.name] = projectEnd;
-      } else {
-        lf[task.name] = Math.min(...successors[task.name].map(s => ls[s]));
-      }
+      lf[task.name] = successors[task.name].length === 0
+        ? projectEnd
+        : Math.min(...successors[task.name].map(s => ls[s]));
       ls[task.name] = lf[task.name] - task.duration;
     });
 
+    // ✅ Marge libre = min(ES des successeurs) - EF
+    // Si aucun successeur → projectEnd - EF
     const result = {};
     tasks.forEach(task => {
       const margin = ls[task.name] - es[task.name];
+      const succs = successors[task.name];
+      const freeMargin = succs.length === 0
+        ? projectEnd - ef[task.name]
+        : Math.min(...succs.map(s => es[s])) - ef[task.name];
+
       result[task.name] = {
         es: es[task.name],
         ef: ef[task.name],
-        ls: ls[task.name],   
+        ls: ls[task.name],
         lf: lf[task.name],
-        margin: margin,   
+        margin,
+        freeMargin,     // ✅ NOUVEAU
         isCritical: margin === 0,
       };
     });
@@ -158,18 +160,10 @@ export default function Home() {
   const successorEntries = Object.entries(successorsData);
   const isSuccessorsComplete = showSuccessors && successorStep === successorEntries.length;
   const currentTask = successorEntries[successorStep]?.[0];
-
-  // ✅ NOUVEAU : La liste des tâches dans l'ordre INVERSE pour l'animation des dates au plus tard
-  // On révèle de la dernière tâche vers la première
-  const reversedTaskNames = [...taskNames].reverse();
-
-  // ✅ Nombre de tâches dont la barre orange est déjà affichée
-  // lateDateStep = 0 → aucune, 1 → dernière tâche, 2 → avant-dernière, etc.
   const isLateDatesComplete = showLateDates && lateDateStep >= tasks.length;
-
-  const isTotalMarginComplete =
-  showTotalMargin &&
-  totalMarginStep >= tasks.length;
+  const isTotalMarginComplete = showTotalMargin && totalMarginStep >= tasks.length;
+  // ✅ NOUVEAU : toutes les barres bleues affichées
+  const isFreeMarginComplete = showFreeMargin && freeMarginStep >= tasks.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -178,7 +172,6 @@ export default function Home() {
       </h1>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* TABLEAUX et REPERE ORTHONORME (GANTT) */}
         <div className="md:col-span-2 overflow-x-auto">
 
           {/* TABLEAU */}
@@ -222,12 +215,8 @@ export default function Home() {
                         if (showSuccessors && successorPhase === 0 && currentTask) {
                           const parts = value.split(",").map(v => v.trim());
                           return parts.map((part, idx) => (
-                            <span
-                              key={idx}
-                              className={part === currentTask ? "text-red-500 font-bold" : ""}
-                            >
-                              {part}
-                              {idx < parts.length - 1 ? ", " : ""}
+                            <span key={idx} className={part === currentTask ? "text-red-500 font-bold" : ""}>
+                              {part}{idx < parts.length - 1 ? ", " : ""}
                             </span>
                           ));
                         }
@@ -244,23 +233,16 @@ export default function Home() {
                   ))}
                 </tr>
 
-                {/* Tâches successeurs */}
                 {showSuccessors && (
                   <tr className="bg-white border-b">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      Tâches successeurs
-                    </td>
+                    <td className="px-4 py-3 font-medium text-gray-900">Tâches successeurs</td>
                     {taskNames.map((taskName, i) => {
                       const currentEntry = successorEntries[i];
-                      const isVisible =
-                        i < successorStep ||
-                        (i === successorStep && successorPhase >= 1);
+                      const isVisible = i < successorStep || (i === successorStep && successorPhase >= 1);
                       return (
                         <td key={i} className="border border-gray-400 px-2 py-3 text-center">
                           {isVisible && currentEntry
-                            ? currentEntry[1].length === 0
-                              ? "Fin"
-                              : currentEntry[1].join(", ")
+                            ? currentEntry[1].length === 0 ? "Fin" : currentEntry[1].join(", ")
                             : ""}
                         </td>
                       );
@@ -268,28 +250,34 @@ export default function Home() {
                   </tr>
                 )}
 
-                {/* Marge totale */}
                 {showTotalMargin && (
                   <tr className="bg-white border-b">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      Marge totale
-                    </td>
-
+                    <td className="px-4 py-3 font-medium text-gray-900">Marge totale</td>
                     {taskNames.map((taskName, i) => {
                       const isVisible = i < totalMarginStep;
-
                       return (
-                        <td
-                          key={i}
-                          className={`border border-gray-400 px-2 py-3 text-center font-semibold ${
-                            criticalData[taskName]?.margin === 0
-                              ? "text-red-500"
-                              : "text-blue-600"
-                          }`}
-                        >
-                          {isVisible
-                            ? criticalData[taskName]?.margin ?? ""
-                            : ""}
+                        <td key={i} className={`border border-gray-400 px-2 py-3 text-center font-semibold ${
+                          criticalData[taskName]?.margin === 0 ? "text-red-500" : "text-blue-600"
+                        }`}>
+                          {isVisible ? criticalData[taskName]?.margin ?? "" : ""}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )}
+
+                {/* ✅ NOUVEAU : ligne Marge libre dans le tableau */}
+                {showFreeMargin && (
+                  <tr className="bg-white border-b">
+                    <td className="px-4 py-3 font-medium text-gray-900">Marge libre</td>
+                    {taskNames.map((taskName, i) => {
+                      const isVisible = i < freeMarginStep;
+                      const fm = criticalData[taskName]?.freeMargin ?? 0;
+                      return (
+                        <td key={i} className={`border border-gray-400 px-2 py-3 text-center font-semibold ${
+                          fm === 0 ? "text-red-500" : "text-blue-600"
+                        }`}>
+                          {isVisible ? fm : ""}
                         </td>
                       );
                     })}
@@ -299,7 +287,7 @@ export default function Home() {
             </table>
           </div>
 
-          {/* REPERE ORTHONORME / GANTT */}
+          {/* GANTT */}
           {started && (
             <div className="mt-8 p-4 bg-white rounded-lg shadow">
               <div className="overflow-x-auto">
@@ -310,24 +298,14 @@ export default function Home() {
                   >
                     <thead>
                       <tr>
-                        <th
-                          style={{ width: 32, minWidth: 32 }}
-                          className="text-center text-gray-600 border-0 pb-1"
-                        >
-                          0
-                        </th>
+                        <th style={{ width: 32, minWidth: 32 }} className="text-center text-gray-600 border-0 pb-1">0</th>
                         {timeLabels.map(t => (
-                          <th
-                            key={t}
-                            style={{ width: 22, minWidth: 22, fontWeight: "normal" }}
-                            className="text-center text-gray-600 border-0 pb-1"
-                          >
+                          <th key={t} style={{ width: 22, minWidth: 22, fontWeight: "normal" }} className="text-center text-gray-600 border-0 pb-1">
                             {t}
                           </th>
                         ))}
                       </tr>
                     </thead>
-
                     <tbody>
                       {taskNames.length === 0 ? (
                         <tr>
@@ -340,95 +318,93 @@ export default function Home() {
                           const isVisible = rowIdx <= step;
                           const info = criticalData[task.name];
 
-                          // ✅ Barre bleue/verte : de es+1 à ef (date au plus tôt)
-                          // ✅ Barre rouge : chemin critique
-                          // ✅ Barre orange : de ef+1 à lf (marge = date au plus tard - date au plus tôt)
-                          //    Elle s'affiche seulement si la tâche a été "révélée" dans l'animation
-                          //    L'animation va de la dernière tâche (index tasks.length-1) vers la première (index 0)
-                          //    reversedTaskNames[0] = dernière tâche, révélée au clic 1
-                          //    reversedTaskNames[lateDateStep-1] = tâche révélée au dernier clic
-
-                          // Index dans la liste inversée
+                          // Barre orange : animation de la dernière vers la première
                           const reversedIdx = tasks.length - 1 - rowIdx;
-                          // La barre orange est visible si showLateDates ET que cet index < lateDateStep
-                          const isOrangeVisible =
-                            showLateDates &&
-                            reversedIdx < lateDateStep;
+                          const isOrangeVisible = showLateDates && reversedIdx < lateDateStep;
+
+                          // ✅ Barre bleue : animation de la première vers la dernière
+                          const isBlueVisible = showFreeMargin && rowIdx < freeMarginStep;
 
                           return (
                             <tr key={rowIdx}>
-                              {/* Nom tâche */}
-                              <td
-                                style={{ width: 32, minWidth: 32 }}
-                                className="text-center font-semibold text-gray-800 border border-gray-300 bg-white"
-                              >
+                              <td style={{ width: 32, minWidth: 32 }} className="text-center font-semibold text-gray-800 border border-gray-300 bg-white">
                                 {task.name}
                               </td>
 
-                              {/* Grille */}
                               {timeLabels.map(t => {
                                 if (!isVisible || !info) {
                                   return (
-                                    <td
-                                      key={t}
-                                      style={{ width: 22, minWidth: 22, height: 28 }}
-                                      className="border border-dashed bg-white"
-                                    />
+                                    <td key={t} style={{ width: 22, minWidth: 22, height: 42, padding: 0, position: "relative", overflow: "hidden", }} className="border border-dashed bg-white" />
                                   );
                                 }
 
-                                // Barre bleue/verte : date au plus tôt (es → ef)
                                 const isEarlyDate = t > info.es && t <= info.ef;
 
-                                // Chemin critique
                                 const critIndex = criticalPath.indexOf(task.name);
                                 const isCritVisible =
-                                  showCritical &&
-                                  critIndex !== -1 &&
+                                  showCritical && critIndex !== -1 &&
                                   critIndex >= criticalPath.length - criticalStep;
                                 const isCriticalCell = isEarlyDate && isCritVisible;
 
-                                // ✅ Barre orange : marge (ef → lf), seulement si pas chemin critique
-                                const isOrangeDate =
-                                  isOrangeVisible &&
-                                  t > info.ls &&
-                                  t <= info.lf;
+                                // Barre orange : ls → lf
+                                const isOrangeDate = isOrangeVisible && t > info.ls && t <= info.lf;
 
-                                let bgColor = "bg-white";
+                                // ✅ Barre bleue = ES → min(ES successeurs)
 
-                                if (isCriticalCell) bgColor = "bg-red-500";
-                                else if (isEarlyDate) bgColor = "bg-green-400";
-                                else if (isOrangeDate) bgColor = "bg-orange-400";
+                                const successors = successorsData[task.name] || [];
+
+                                // Si aucun successeur → fin projet
+                                const minSuccessorES =
+                                  successors.length === 0
+                                    ? projectEnd
+                                    : Math.min(...successors.map(s => criticalData[s].es));
+
+                                const isBlueDate =
+                                  isBlueVisible &&
+                                  t > (minSuccessorES - task.duration) &&
+                                  t <= minSuccessorES;
 
                                 return (
                                   <td
                                     key={t}
                                     style={{
-                                      width: 22,
-                                      minWidth: 22,
-                                      height: 28,
-                                      padding: 0,
-                                      position: "relative",
-                                      overflow: "hidden",
-                                      borderRadius: 2,
+                                      width: 22, minWidth: 22, height: 42,
+                                      padding: 0, position: "relative", overflow: "hidden",
                                     }}
                                     className="border border-dashed bg-white"
                                   >
-                                    {/* BARRE ORANGE (haut) */}
-                                    {isOrangeDate && (
+                                    {/* BARRE BLEUE — tout en haut */}
+                                    {isBlueDate  && (
                                       <div
-                                        className="bg-orange-400"
+                                        className="bg-blue-400"
                                         style={{
                                           position: "absolute",
                                           top: 0,
                                           left: 0,
                                           width: "100%",
-                                          height: "40%",
+                                          height: "30%",
+                                          zIndex: 3,
+                                          borderBottom: "1px solid white",
                                         }}
                                       />
                                     )}
 
-                                    {/* BARRE VERTE ou ROUGE (bas) */}
+                                    {/* BARRE ORANGE — milieu */}
+                                    {isOrangeDate && (
+                                      <div
+                                        className="bg-orange-400"
+                                        style={{
+                                          position: "absolute",
+                                          top: "30%",
+                                          left: 0,
+                                          width: "100%",
+                                          height: "26%",
+                                          zIndex: 2,
+                                        }}
+                                      />
+                                    )}
+
+                                    {/* BARRE VERTE / ROUGE — bas */}
                                     {(isEarlyDate || isCriticalCell) && (
                                       <div
                                         className={isCriticalCell ? "bg-red-500" : "bg-green-400"}
@@ -437,7 +413,8 @@ export default function Home() {
                                           bottom: 0,
                                           left: 0,
                                           width: "100%",
-                                          height: "60%",
+                                          height: "35%",
+                                          zIndex: 1,
                                         }}
                                       />
                                     )}
@@ -456,87 +433,64 @@ export default function Home() {
               {/* Légende */}
               <div className="flex gap-4 mt-3 text-xs text-gray-600 flex-wrap">
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Tâche normale (Date au plus tôt)
+                  <span className="inline-block w-4 h-4 bg-green-400 rounded" /> Date au plus tôt
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="inline-block w-4 h-4 bg-red-400 rounded" /> Chemin critique
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-orange-400 rounded" /> Date au plus tard (marge)
+                  <span className="inline-block w-4 h-4 bg-orange-400 rounded" /> Flexibilité globale (marge totale)
                 </span>
                 <span className="flex items-center gap-1">
-                  <span className="inline-block w-4 h-4 bg-blue-400 rounded" /> (-------)
+                  <span className="inline-block w-4 h-4 bg-blue-400 rounded" /> Flexibilité immédiate (marge libre)
                 </span>
               </div>
             </div>
           )}
         </div>
 
-        {/* DIMENSION & RESOLUTION */}
+        {/* PANNEAU DROIT */}
         <div className="bg-white p-6 rounded-lg shadow">
-          {/* DIMENSION */}
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-[#033012]">
-              Dimension du tableau :
-            </h2>
+            <h2 className="text-xl font-bold text-[#033012]">Dimension du tableau :</h2>
             <div className="flex items-center gap-3 text-gray-600">
-              <button
-                onClick={decreaseCols}
-                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                ◀
-              </button>
+              <button onClick={decreaseCols} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">◀</button>
               <span>{rows}</span>
               <span className="font-bold">x</span>
               <span>{cols}</span>
-              <button
-                onClick={increaseCols}
-                className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300"
-              >
-                ▶
-              </button>
+              <button onClick={increaseCols} className="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">▶</button>
             </div>
           </div>
 
-          {/* RESOLUTION PAR ETAPE */}
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold mb-4 text-[#033012]">
-              Résolution par étape
-            </h2>
+            <h2 className="text-xl font-bold mb-4 text-[#033012]">Résolution par étape</h2>
             {!started ? (
               <button
                 onClick={() => setStarted(true)}
                 disabled={!isTableComplete}
                 className={`px-3 py-1 rounded text-white ${
-                  isTableComplete
-                    ? "bg-green-500 hover:bg-green-600"
-                    : "bg-gray-300 cursor-not-allowed"
+                  isTableComplete ? "bg-green-500 hover:bg-green-600" : "bg-gray-300 cursor-not-allowed"
                 }`}
               >
                 Commencer
               </button>
             ) : (
               <div className="flex gap-2">
-                <button
-                  onClick={() => setStep(prev => Math.max(prev - 1, 0))}
-                  className="px-3 py-1 rounded bg-gray-400 hover:bg-gray-500 text-white"
-                >
+                <button onClick={() => setStep(prev => Math.max(prev - 1, 0))} className="px-3 py-1 rounded bg-gray-400 hover:bg-gray-500 text-white">
                   Précédent
                 </button>
                 <button
                   onClick={() => {
-                    // ── ÉTAPE 1 : Affichage des tâches (Gantt) ──
+                    // ── ÉTAPE 1 : Positionnement ──
                     if (step < tasks.length - 1) {
                       setStep(prev => prev + 1);
                     }
-
                     // ── ÉTAPE 2 : Chemin critique ──
                     else if (!showCritical) {
                       setShowCritical(true);
                     } else if (criticalStep < criticalPath.length) {
                       setCriticalStep(prev => prev + 1);
                     }
-
                     // ── ÉTAPE 3 : Successeurs ──
                     else if (!showSuccessors) {
                       setShowSuccessors(true);
@@ -548,27 +502,27 @@ export default function Home() {
                         setSuccessorStep(prev => prev + 1);
                       }
                     }
-
-                    // ── ÉTAPE 4 : Dates au plus tard (barres oranges) ──
-                    // On active d'abord, puis on révèle une tâche à la fois
-                    // de la DERNIÈRE vers la PREMIÈRE
+                    // ── ÉTAPE 4 : Dates au plus tard (oranges, dernière → première) ──
                     else if (!showLateDates) {
                       setShowLateDates(true);
-                      setLateDateStep(1); // révèle la dernière tâche
+                      setLateDateStep(1);
                     } else if (lateDateStep < tasks.length) {
                       setLateDateStep(prev => prev + 1);
                     }
-                    // ── ÉTAPE 5 : Affichage ligne "Marge totale" ──
+                    // ── ÉTAPE 5 : Marge totale (tableau + barres déjà visibles via orange) ──
                     else if (!showTotalMargin && isLateDatesComplete) {
                       setShowTotalMargin(true);
                       setTotalMarginStep(1);
-                    }
-                    else if (totalMarginStep < tasks.length) {
+                    } else if (totalMarginStep < tasks.length) {
                       setTotalMarginStep(prev => prev + 1);
                     }
-
-                    // ── Étapes suivantes (non encore implémentées) ──
-                    // else { ... }
+                    // ── ÉTAPE 6 : Marge libre (bleues, première → dernière) ──
+                    else if (!showFreeMargin && isTotalMarginComplete) {
+                      setShowFreeMargin(true);
+                      setFreeMarginStep(1); // révèle la 1ère tâche
+                    } else if (freeMarginStep < tasks.length) {
+                      setFreeMarginStep(prev => prev + 1);
+                    }
                   }}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
                 >
@@ -578,7 +532,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* MESSAGE D'ERREUR */}
           {!isTableComplete && !started && (
             <p className="text-red-500 text-sm mt-2">
               Veuillez remplir toutes les cellules avant de commencer.
@@ -587,22 +540,20 @@ export default function Home() {
 
           <div>
             <h2 className="text-xl font-bold text-[#033012]">Etapes de réalisation ORD GANTT :</h2>
-
             {stepsList.map((label, index) => {
               const isStepDone =
                 (index === 0 && isAllTasksDisplayed) ||
                 (index === 1 && isCriticalComplete) ||
                 (index === 2 && isSuccessorsComplete) ||
                 (index === 3 && isLateDatesComplete) ||
-                (index === 4 && isTotalMarginComplete);
+                (index === 4 && isTotalMarginComplete) ||
+                (index === 5 && isFreeMarginComplete); // ✅ "Flexibilité immédiate" cochée
 
               return (
                 <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50 mb-1">
-                  <div
-                    className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
-                      isStepDone ? "bg-green-500" : "bg-gray-300"
-                    }`}
-                  >
+                  <div className={`w-6 h-6 flex items-center justify-center rounded-full text-white text-sm ${
+                    isStepDone ? "bg-green-500" : "bg-gray-300"
+                  }`}>
                     {isStepDone ? "✓" : index + 1}
                   </div>
                   <p className={`text-sm ${isStepDone ? "text-green-700 line-through" : "text-gray-600"}`}>
