@@ -486,9 +486,77 @@ export default function Home() {
               </button>
             ) : (
               <div className="flex gap-2">
-                <button onClick={() => setStep(prev => Math.max(prev - 1, 0))} className="px-3 py-1 rounded bg-gray-400 hover:bg-gray-500 text-white">
+                {/* BOUTON PRECEDENT */}
+                <button
+                  onClick={() => {
+                    // ── ÉTAPE 7 : Marge libre tableau ──
+                    if (showFreeMarginTable) {
+                      if (freeMarginTableStep > 1) {
+                        setFreeMarginTableStep(prev => prev - 1);
+                      } else {
+                        setShowFreeMarginTable(false);
+                        setFreeMarginTableStep(0);
+                      }
+                    }
+                    // ── ÉTAPE 6 : Barres bleues ──
+                    else if (showBlueBars) {
+                      if (blueBarStep > 1) {
+                        setBlueBarStep(prev => prev - 1);
+                      } else {
+                        setShowBlueBars(false);
+                        setBlueBarStep(0);
+                      }
+                    }
+                    // ── ÉTAPE 5 : Marge totale ──
+                    else if (showTotalMargin) {
+                      if (totalMarginStep > 1) {
+                        setTotalMarginStep(prev => prev - 1);
+                      } else {
+                        setShowTotalMargin(false);
+                        setTotalMarginStep(0);
+                      }
+                    }
+                    // ── ÉTAPE 4 : Dates au plus tard ──
+                    else if (showLateDates) {
+                      if (lateDateStep > 1) {
+                        setLateDateStep(prev => prev - 1);
+                      } else {
+                        setShowLateDates(false);
+                        setLateDateStep(0);
+                      }
+                    }
+                    // ── ÉTAPE 3 : Successeurs ──
+                    else if (showSuccessors) {
+                      if (!isSuccessorsComplete && successorPhase === 2) {
+                        setSuccessorPhase(0);
+                      } else if (successorStep > 0) {
+                        setSuccessorStep(prev => prev - 1);
+                        setSuccessorPhase(2);
+                      } else {
+                        setShowSuccessors(false);
+                        setSuccessorStep(0);
+                        setSuccessorPhase(0);
+                      }
+                    }
+                    // ── ÉTAPE 2 : Chemin critique ──
+                    else if (showCritical) {
+                      if (criticalStep > 0) {
+                        setCriticalStep(prev => prev - 1);
+                      } else {
+                        setShowCritical(false);
+                      }
+                    }
+                    // ── ÉTAPE 1 : Positionnement ──
+                    else if (step > 0) {
+                      setStep(prev => prev - 1);
+                    }
+                  }}
+                  className="px-3 py-1 rounded bg-gray-400 hover:bg-gray-500 text-white"
+                >
                   Précédent
                 </button>
+
+                {/* BOUTON SUIVANT */}
                 <button
                   onClick={() => {
                     // ── ÉTAPE 1 : Positionnement ──
