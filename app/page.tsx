@@ -27,9 +27,13 @@ export default function Home() {
   const [showTotalMargin, setShowTotalMargin] = useState(false);
   const [totalMarginStep, setTotalMarginStep] = useState(0);
 
-  // ✅ NOUVEAU : marge libre (barres bleues), de la 1ère vers la dernière tâche
-  const [showFreeMargin, setShowFreeMargin] = useState(false);
-  const [freeMarginStep, setFreeMarginStep] = useState(0);
+  // ✅ ÉTAPE 6 : barres bleues dans le Gantt
+  const [showBlueBars, setShowBlueBars] = useState(false);
+  const [blueBarStep, setBlueBarStep] = useState(0);
+
+  // ✅ ÉTAPE 7 : marge libre dans le tableau
+  const [showFreeMarginTable, setShowFreeMarginTable] = useState(false);
+  const [freeMarginTableStep, setFreeMarginTableStep] = useState(0);
 
   const stepsList = [
     "Positionnement des tâches",
@@ -162,8 +166,14 @@ export default function Home() {
   const currentTask = successorEntries[successorStep]?.[0];
   const isLateDatesComplete = showLateDates && lateDateStep >= tasks.length;
   const isTotalMarginComplete = showTotalMargin && totalMarginStep >= tasks.length;
-  // ✅ NOUVEAU : toutes les barres bleues affichées
-  const isFreeMarginComplete = showFreeMargin && freeMarginStep >= tasks.length;
+
+ // Étape 6 terminée
+  const isBlueBarsComplete =
+    showBlueBars && blueBarStep >= tasks.length;
+
+  // Étape 7 terminée
+  const isFreeMarginTableComplete =
+    showFreeMarginTable && freeMarginTableStep >= tasks.length;
 
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
@@ -267,11 +277,11 @@ export default function Home() {
                 )}
 
                 {/* ✅ NOUVEAU : ligne Marge libre dans le tableau */}
-                {showFreeMargin && (
+                {showFreeMarginTable  && (
                   <tr className="bg-white border-b">
                     <td className="px-4 py-3 font-medium text-gray-900">Marge libre</td>
                     {taskNames.map((taskName, i) => {
-                      const isVisible = i < freeMarginStep;
+                      const isVisible = i < freeMarginTableStep;
                       const fm = criticalData[taskName]?.freeMargin ?? 0;
                       return (
                         <td key={i} className={`border border-gray-400 px-2 py-3 text-center font-semibold ${
@@ -323,7 +333,7 @@ export default function Home() {
                           const isOrangeVisible = showLateDates && reversedIdx < lateDateStep;
 
                           // ✅ Barre bleue : animation de la première vers la dernière
-                          const isBlueVisible = showFreeMargin && rowIdx < freeMarginStep;
+                          const isBlueVisible = showBlueBars && rowIdx < blueBarStep;
 
                           return (
                             <tr key={rowIdx}>
@@ -516,12 +526,22 @@ export default function Home() {
                     } else if (totalMarginStep < tasks.length) {
                       setTotalMarginStep(prev => prev + 1);
                     }
-                    // ── ÉTAPE 6 : Marge libre (bleues, première → dernière) ──
-                    else if (!showFreeMargin && isTotalMarginComplete) {
-                      setShowFreeMargin(true);
-                      setFreeMarginStep(1); // révèle la 1ère tâche
-                    } else if (freeMarginStep < tasks.length) {
-                      setFreeMarginStep(prev => prev + 1);
+                    // ── ÉTAPE 6 : Barres bleues dans le Gantt ──
+                    else if (!showBlueBars && isTotalMarginComplete) {
+                      setShowBlueBars(true);
+                      setBlueBarStep(1);
+                    }
+                    else if (blueBarStep < tasks.length) {
+                      setBlueBarStep(prev => prev + 1);
+                    }
+
+                    // ── ÉTAPE 7 : Marge libre dans le tableau ──
+                    else if (!showFreeMarginTable && isBlueBarsComplete) {
+                      setShowFreeMarginTable(true);
+                      setFreeMarginTableStep(1);
+                    }
+                    else if (freeMarginTableStep < tasks.length) {
+                      setFreeMarginTableStep(prev => prev + 1);
                     }
                   }}
                   className="px-3 py-1 rounded bg-green-500 hover:bg-green-600 text-white"
@@ -547,7 +567,8 @@ export default function Home() {
                 (index === 2 && isSuccessorsComplete) ||
                 (index === 3 && isLateDatesComplete) ||
                 (index === 4 && isTotalMarginComplete) ||
-                (index === 5 && isFreeMarginComplete); // ✅ "Flexibilité immédiate" cochée
+                (index === 5 && isBlueBarsComplete) ||
+                (index === 6 && isFreeMarginTableComplete);
 
               return (
                 <div key={index} className="flex items-center gap-3 p-3 rounded-lg border bg-gray-50 mb-1">
