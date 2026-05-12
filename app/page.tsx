@@ -2,6 +2,22 @@
 
 import { useState, useEffect } from "react";
 
+type Task = {
+  name: string;
+  duration: number;
+  deps: string[];
+};
+
+type CriticalTaskData = {
+  es: number;
+  ef: number;
+  ls: number;
+  lf: number;
+  margin: number;
+  freeMargin: number;
+  isCritical: boolean;
+};
+
 export default function Home() {
   const [cols, setCols] = useState(14);
   const [rows, setRows] = useState(3);
@@ -45,7 +61,7 @@ export default function Home() {
     "Marge libre",
   ];
 
-  const [tableData, setTableData] = useState(
+  const [tableData, setTableData] = useState<string[][]>(
     Array.from({ length: 3 }, () => Array(14).fill(""))
   );
 
@@ -62,13 +78,17 @@ export default function Home() {
     );
   }, [cols]);
 
-  const handleChange = (rowIndex, colIndex, value) => {
-    setTableData(prev => {
-      const newData = [...prev];
-      newData[rowIndex][colIndex] = value;
-      return newData;
-    });
-  };
+  const handleChange = (
+    rowIndex: number,
+    colIndex: number,
+    value: string
+  ) => {
+        setTableData(prev => {
+          const newData = [...prev];
+          newData[rowIndex][colIndex] = value;
+          return newData;
+        });
+      };
 
   const taskNames = tableData[0].filter(name => name.trim() !== "");
   const maxTime = 50;
@@ -81,17 +101,17 @@ export default function Home() {
     const deps =
       depsRaw.trim() === "-" || depsRaw.trim() === ""
         ? []
-        : depsRaw.split(",").map(d => d.trim());
+        : depsRaw.split(",").map((d: string) => d.trim());
     return { name, duration, deps };
   });
 
-  const calculateCriticalPath = (tasks) => {
-    const es = {};
-    const ef = {};
-    const ls = {};
-    const lf = {};
+  const calculateCriticalPath = (tasks: Task[]) => {
+    const es: Record<string, number> = {};
+    const ef: Record<string, number> = {};
+    const ls: Record<string, number> = {};
+    const lf: Record<string, number> = {};
 
-    tasks.forEach(task => {
+    tasks.forEach((task: Task) => {
       es[task.name] = task.deps.length === 0
         ? 0
         : Math.max(...task.deps.map(d => ef[d] || 0));
@@ -100,7 +120,7 @@ export default function Home() {
 
     const projectEnd = Math.max(...Object.values(ef));
 
-    const successors = {};
+    const successors: Record<string, string[]> = {};
     tasks.forEach(t => { successors[t.name] = []; });
     tasks.forEach(t => {
       t.deps.forEach(dep => {
@@ -111,19 +131,19 @@ export default function Home() {
     [...tasks].reverse().forEach(task => {
       lf[task.name] = successors[task.name].length === 0
         ? projectEnd
-        : Math.min(...successors[task.name].map(s => ls[s]));
+        : Math.min(...successors[task.name].map((s: string) => ls[s]));
       ls[task.name] = lf[task.name] - task.duration;
     });
 
     // ✅ Marge libre = min(ES des successeurs) - EF
     // Si aucun successeur → projectEnd - EF
-    const result = {};
+    const result: Record<string, CriticalTaskData> = {};
     tasks.forEach(task => {
       const margin = ls[task.name] - es[task.name];
       const succs = successors[task.name];
       const freeMargin = succs.length === 0
         ? projectEnd - ef[task.name]
-        : Math.min(...succs.map(s => es[s])) - ef[task.name];
+        : Math.min(...succs.map((s: string) => es[s])) - ef[task.name];
 
       result[task.name] = {
         es: es[task.name],
@@ -146,8 +166,8 @@ export default function Home() {
     .filter(t => criticalData[t.name]?.isCritical)
     .map(t => t.name);
 
-  const calculateSuccessors = (tasks) => {
-    const successors = {};
+  const calculateSuccessors = (tasks: Task[]) => {
+    const successors: Record<string, string[]> = {};
     tasks.forEach(t => { successors[t.name] = []; });
     tasks.forEach(t => {
       t.deps.forEach(dep => {
@@ -161,7 +181,7 @@ export default function Home() {
 
   const isAllTasksDisplayed = tasks.length > 0 && step >= tasks.length - 1;
   const isCriticalComplete = showCritical && criticalStep === criticalPath.length;
-  const successorEntries = Object.entries(successorsData);
+  const successorEntries: [string, string[]][] = Object.entries(successorsData);
   const isSuccessorsComplete = showSuccessors && successorStep === successorEntries.length;
   const currentTask = successorEntries[successorStep]?.[0];
   const isLateDatesComplete = showLateDates && lateDateStep >= tasks.length;
