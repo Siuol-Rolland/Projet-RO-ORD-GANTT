@@ -105,6 +105,55 @@ export default function Home() {
     return { name, duration, deps };
   });
 
+  const sortTasksByDependencies = (tasks: Task[]) => {
+    const sorted: Task[] = [];
+
+    // tâches déjà affichées
+    const displayed = new Set<string>();
+
+    // tant qu'il reste des tâches à afficher
+    while (sorted.length < tasks.length) {
+
+      let progress = false;
+
+      tasks.forEach(task => {
+
+        // ignorer si déjà affichée
+        if (displayed.has(task.name)) return;
+
+        const allDepsDisplayed = task.deps.every(dep => {
+
+          // vérifier si la dépendance existe
+          const depExists = tasks.some(t => t.name === dep);
+
+          if (!depExists) {
+            console.error(`La dépendance "${dep}" n'existe pas.`);
+            return false;
+          }
+
+          return displayed.has(dep);
+        });
+
+        // si oui → afficher la tâche
+        if (allDepsDisplayed) {
+          sorted.push(task);
+          displayed.add(task.name);
+          progress = true;
+        }
+      });
+
+      // sécurité : éviter boucle infinie
+      if (!progress) {
+        console.error("Dépendances circulaires détectées !");
+        break;
+      }
+    }
+
+    return sorted;
+  };
+
+  const orderedTasks = sortTasksByDependencies(tasks);
+
   const calculateCriticalPath = (tasks: Task[]) => {
     const es: Record<string, number> = {};
     const ef: Record<string, number> = {};
@@ -160,9 +209,9 @@ export default function Home() {
   };
 
   const { result: criticalData = {}, projectEnd = 0 } =
-    tasks.length > 0 ? calculateCriticalPath(tasks) : {};
+    tasks.length > 0 ? calculateCriticalPath(orderedTasks) : {};
 
-  const criticalPath = tasks
+  const criticalPath = orderedTasks
     .filter(t => criticalData[t.name]?.isCritical)
     .map(t => t.name);
 
@@ -179,7 +228,7 @@ export default function Home() {
 
   const successorsData = tasks.length > 0 ? calculateSuccessors(tasks) : {};
 
-  const isAllTasksDisplayed = tasks.length > 0 && step >= tasks.length - 1;
+  const isAllTasksDisplayed = tasks.length > 0 && step >= orderedTasks.length - 1;
   const isCriticalComplete = showCritical && criticalStep === criticalPath.length;
   const successorEntries: [string, string[]][] = Object.entries(successorsData);
   const isSuccessorsComplete = showSuccessors && successorStep === successorEntries.length;
@@ -195,6 +244,10 @@ export default function Home() {
   const isFreeMarginTableComplete =
     showFreeMarginTable && freeMarginTableStep >= tasks.length;
 
+  const displayedTasks = orderedTasks
+  .slice(0, step + 1)
+  .map(t => t.name);
+  
   return (
     <div className="min-h-screen p-6 bg-zinc-50">
       <h1 className="text-3xl font-bold text-center text-[#033012] mb-10">
@@ -345,15 +398,18 @@ export default function Home() {
                         </tr>
                       ) : (
                         tasks.map((task, rowIdx) => {
-                          const isVisible = rowIdx <= step;
+                          const isVisible = displayedTasks.includes(task.name);
                           const info = criticalData[task.name];
 
                           // Barre orange : animation de la dernière vers la première
-                          const reversedIdx = tasks.length - 1 - rowIdx;
+                          const taskOrderIndex = orderedTasks.findIndex(t => t.name === task.name);
+                          const reversedIdx = orderedTasks.length - 1 - taskOrderIndex;
                           const isOrangeVisible = showLateDates && reversedIdx < lateDateStep;
 
                           // ✅ Barre bleue : animation de la première vers la dernière
-                          const isBlueVisible = showBlueBars && rowIdx < blueBarStep;
+                          const isBlueVisible =
+                            showBlueBars &&
+                            taskOrderIndex < blueBarStep;
 
                           return (
                             <tr key={rowIdx}>
@@ -580,7 +636,7 @@ export default function Home() {
                 <button
                   onClick={() => {
                     // ── ÉTAPE 1 : Positionnement ──
-                    if (step < tasks.length - 1) {
+                    if (step < orderedTasks.length - 1) {
                       setStep(prev => prev + 1);
                     }
                     // ── ÉTAPE 2 : Chemin critique ──
@@ -619,7 +675,7 @@ export default function Home() {
                       setShowBlueBars(true);
                       setBlueBarStep(1);
                     }
-                    else if (blueBarStep < tasks.length) {
+                    else if (blueBarStep < orderedTasks.length) {
                       setBlueBarStep(prev => prev + 1);
                     }
 
